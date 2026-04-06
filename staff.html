@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>بث المصور - نادي المحارب الرياضي</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        :root { --primary: #005B71; --gold: #D4AF37; --white: #ffffff; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, sans-serif; 
+            margin: 0; 
+            background: var(--primary); 
+            color: white; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            padding: 20px;
+        }
+        .header { margin-bottom: 20px; text-align: center; }
+        .header img { width: 60px; border-radius: 50%; border: 2px solid var(--gold); }
+        
+        .video-container { 
+            width: 100%; 
+            max-width: 500px; 
+            aspect-ratio: 16/9; 
+            background: black; 
+            border: 3px solid var(--gold); 
+            border-radius: 15px; 
+            overflow: hidden; 
+            position: relative;
+        }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        
+        .status-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.6);
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .dot { width: 8px; height: 8px; background: red; border-radius: 50%; }
+        .dot.online { background: #00ff00; }
+
+        .controls { 
+            width: 100%; 
+            max-width: 500px; 
+            margin-top: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+        }
+        input { 
+            padding: 15px; 
+            border-radius: 10px; 
+            border: none; 
+            text-align: center; 
+            font-size: 1rem;
+            font-weight: bold;
+        }
+        .btn { 
+            padding: 15px; 
+            border: none; 
+            border-radius: 10px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            font-size: 1rem;
+            transition: 0.3s;
+        }
+        .btn-start { background: var(--gold); color: black; }
+        .btn-switch { background: white; color: var(--primary); }
+        .footer-text { margin-top: 30px; font-size: 0.8rem; opacity: 0.7; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <img src="8397.jpg" alt="Logo">
+        <h2>كاميرا المصور الميداني</h2>
+        <p>نادي المحارب الرياضي</p>
+    </div>
+
+    <div class="video-container">
+        <div class="status-badge">
+            <div id="status-dot" class="dot"></div>
+            <span id="status-text">غير متصل</span>
+        </div>
+        <video id="local-video" autoplay playsinline muted></video>
+    </div>
+
+    <div class="controls">
+        <input type="text" id="staff-id" placeholder="ادخل اسم الكاميرا (مثلاً: cam1)">
+        
+        <button class="btn btn-start" onclick="initStaffStream()">🚀 بدء البث والاستقبال</button>
+        
+        <button class="btn btn-switch" onclick="switchCamera()">🔄 تبديل الكاميرا (أمامية / خلفية)</button>
+    </div>
+
+    <p class="footer-text">تأكد من إعطاء صلاحية الكاميرا والميكروفون للمتصفح</p>
+
+    <script>
+        let localStream;
+        let peer;
+        let currentFacingMode = "environment"; // نبدأ بالكاميرا الخلفية للملعب
+
+        // 1. وظيفة الحصول على البث وتغيير الكاميرا
+        async function getMedia(facingMode) {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode },
+                    audio: true
+                });
+                document.getElementById('local-video').srcObject = localStream;
+                return true;
+            } catch (err) {
+                console.error("خطأ في الكاميرا: ", err);
+                alert("لم نستطع الوصول للكاميرا. تأكد من الإعدادات.");
+                return false;
+            }
+        }
+
+        // 2. تفعيل البث والربط مع المخرج
+        async function initStaffStream() {
+            const myId = document.getElementById('staff-id').value;
+            if (!myId) {
+                alert("الرجاء كتابة اسم للكاميرا أولاً");
+                return;
+            }
+
+            const success = await getMedia(currentFacingMode);
+            if (!success) return;
+
+            // إنشاء معرف Peer بالاسم الذي اخترته
+            peer = new Peer(myId);
+
+            peer.on('open', (id) => {
+                document.getElementById('status-dot').classList.add('online');
+                document.getElementById('status-text').innerText = "جاهز للاستقبال: " + id;
+                alert("جاهز! اطلب من المخرج الاتصال بـ: " + id);
+            });
+
+            // عندما يتصل المخرج، أجب عليه بالبث المباشر
+            peer.on('call', (call) => {
+                call.answer(localStream);
+                document.getElementById('status-text').innerText = "جاري البث للمخرج حالياً...";
+            });
+
+            peer.on('error', (err) => {
+                console.error(err);
+                alert("حدث خطأ في الاتصال: " + err.type);
+            });
+        }
+
+        // 3. وظيفة تبديل الكاميرا
+        async function switchCamera() {
+            currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
+            const success = await getMedia(currentFacingMode);
+            
+            // إذا كان هناك اتصال قائم، نحتاج لتحديث البث عند المخرج (اختياري، يفضل إعادة الاتصال)
+            if (success && peer && !peer.destroyed) {
+                alert("تم تبديل الكاميرا. قد يحتاج المخرج لإعادة الاتصال لرؤية الفرق.");
+            }
+        }
+    </script>
+</body>
+</html>
